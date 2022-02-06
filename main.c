@@ -58,15 +58,38 @@ void main(void)
     //NVIC_EnableIRQ(TA2_N_IRQn);
     __enable_interrupts();
 
+
+    //Filter variables needed
+    int counter = 0;
+    int M = 4;
+    int filtered_val;
+
+    // Create values for 5 cycles
+    volatile unsigned int cycle_vals[5] =  { 0, 0, 0, 0, 0 }; // Assign starting values
+
+    //Counter int - goes from 0-M
     while (1)  {
 
         if ((ADC14->IFGR0 & ADC14_IFGR0_IFG0) != 0)  {
             P6->OUT = 0x00;
             ADC_In = ((ADC14->MEM[0]) >> ADCSCALE);
 
+            cycle_vals[counter] = ADC_In; //Insert new value in ADC_In at the counter position
+            filtered_val = 0;
+
+            //Averaging filter
+            int i;
+            for(i=0; i<=M; i++) {
+                filtered_val += ( cycle_vals[i] / (1+M) ) ; // Sums average of all cycle values
+            }
+
             TIMER_A2->CCR[0] = 0;               //disable timer
-            TIMER_A2->CCR[1] = ADC_In;          //load new duty cycle value
+            TIMER_A2->CCR[1] = filtered_val;    //load new duty cycle value
             TIMER_A2->CCR[0] = PWM_PERIOD-1;    //enable timer
+
+            // Increment counter from 0-5
+            counter += 1;
+            if(counter>M) counter=0;
         }
 
     }
