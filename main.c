@@ -25,6 +25,7 @@ void main(void)
     //P7->SEL0 |= SMCLK;
 
     P6->DIR |= BIT0;        //sampling flag P6.0
+    P6->DIR |= BIT1;        // Set 6.1 up to measure sampling time
     P6->OUT = 0;            //for measuring sampling frequency and ADC conversion time
 
     P5->DIR |= BIT6;        //PWM output P5.6
@@ -71,7 +72,7 @@ void main(void)
     while (1)  {
 
         if ((ADC14->IFGR0 & ADC14_IFGR0_IFG0) != 0)  {
-            P6->OUT = 0x00;
+            P6->OUT = BIT1; //Turn high when starting to process
 
             ADC_In = ((ADC14->MEM[0]) >> ADCSCALE);
 
@@ -106,6 +107,8 @@ void main(void)
             TIMER_A2->CCR[0] = 0;               //disable timer
             TIMER_A2->CCR[1] = sum;             //load new duty cycle value
             TIMER_A2->CCR[0] = PWM_PERIOD-1;    //enable timer
+
+            P6->OUT = 0; // Turn low when done processing
 
         }
 
