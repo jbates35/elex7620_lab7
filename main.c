@@ -14,6 +14,7 @@
 #define SR_12kHz    4096
 #define FSAMP       SR_12kHz //sampling frequency
 
+
 void main(void)
 {
     volatile unsigned int ADC_In=0;
@@ -60,32 +61,43 @@ void main(void)
 
     // Make x[N] of array length size(h_lpf) = {0}
     int x_in[N] = {};
+    int x_in_temp[N] = {};
 
     // Variable that gets assigned sum which will get assigned to y[n]
     float sum_f;
-    int sum;
+    int sum=0;
+    int i;
 
     while (1)  {
 
         if ((ADC14->IFGR0 & ADC14_IFGR0_IFG0) != 0)  {
             P6->OUT = 0x00;
+
             ADC_In = ((ADC14->MEM[0]) >> ADCSCALE);
 
             // Reset sum
             sum_f = 0;
 
-            // For loop that starts at 0 to N
-            int i;
-            for (i = (N-1); i>=0; i--) {
+            // Record current x_in to a temp
+            memcpy(x_in_temp, x_in, sizeof(x_in_temp));
+
+            //Iterate through loop to shift elements up one
+            for (i = (N-1)/2; i>=0; i--) {
 
                 // If = N-1, Store ADC value in x[i]
-                if(i == 0) x_in[i] = ADC_In - 256;
-                else x_in[i] = x_in[i-1];
+                if(i == 0) {
+                    x_in[i] = ADC_In - 256;
+                    x_in[N-1-i] = x_in_temp[N-2-i];
+                }
+                else {
+                    x_in[i] = x_in_temp[i-1];
+                    x_in[N-1-i] = x_in_temp[N-2-i];
+                }
 
                 // sum += h[n] * x[n]
-                sum_f = sum_f + (h[i] * x_in[i]);
+                if (i==(N-1)/2) sum_f = sum_f + h[i] * x_in[i];
+                else sum_f = sum_f + h[i] * (x_in[i] + x_in[N-1-i]);
             } // End for
-
 
             // If sum is over max of PWM, round to PWM max (2^9-1 I believe)
             sum = sum_f + 256;
@@ -94,7 +106,6 @@ void main(void)
             TIMER_A2->CCR[0] = 0;               //disable timer
             TIMER_A2->CCR[1] = sum;             //load new duty cycle value
             TIMER_A2->CCR[0] = PWM_PERIOD-1;    //enable timer
-
 
         }
 
