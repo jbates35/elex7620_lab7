@@ -1,4 +1,5 @@
 #include "msp.h"
+#include "bandpassFIRcoefs.h" //import N and h[n]
 
 //assumes system clock is at 48 MHz
 //input dividers on Timer A = div 1, input to Timer A = 48 MHz
@@ -12,7 +13,6 @@
 
 #define SR_12kHz    4096
 #define FSAMP       SR_12kHz //sampling frequency
-
 
 void main(void)
 {
@@ -58,38 +58,44 @@ void main(void)
     //NVIC_EnableIRQ(TA2_N_IRQn);
     __enable_interrupts();
 
+    // Make x[N] of array length size(h_lpf) = {0}
+    int x_in[N] = {};
 
-    //Filter variables needed
-    int counter = 0;
-    int M = 4;
-    int filtered_val;
+    // Variable that gets assigned sum which will get assigned to y[n]
+    float sum_f;
+    int sum;
 
-    // Create values for 5 cycles
-    volatile unsigned int cycle_vals[5] =  { 0, 0, 0, 0, 0 }; // Assign starting values
-
-    //Counter int - goes from 0-M
     while (1)  {
 
         if ((ADC14->IFGR0 & ADC14_IFGR0_IFG0) != 0)  {
             P6->OUT = 0x00;
             ADC_In = ((ADC14->MEM[0]) >> ADCSCALE);
 
-            cycle_vals[counter] = ADC_In; //Insert new value in ADC_In at the counter position
-            filtered_val = 0;
+            // Reset sum
+            sum_f = 0;
 
-            //Averaging filter
+            // For loop that starts at 0 to N
             int i;
-            for(i=0; i<=M; i++) {
-                filtered_val += ( cycle_vals[i] / (1+M) ) ; // Sums average of all cycle values
-            }
+            for (i = (N-1); i>=0; i--) {
 
+                // If = N-1, Store ADC value in x[i]
+                if(i == 0) x_in[i] = ADC_In - 256;
+                else x_in[i] = x_in[i-1];
+
+                // sum += h[n] * x[n]
+                sum_f = sum_f + (h[i] * x_in[i]);
+            } // End for
+
+
+            // If sum is over max of PWM, round to PWM max (2^9-1 I believe)
+            sum = sum_f + 256;
+
+            // Now put sum in PWM
             TIMER_A2->CCR[0] = 0;               //disable timer
-            TIMER_A2->CCR[1] = filtered_val;    //load new duty cycle value
+            TIMER_A2->CCR[1] = sum;             //load new duty cycle value
             TIMER_A2->CCR[0] = PWM_PERIOD-1;    //enable timer
 
-            // Increment counter from 0-5
-            counter += 1;
-            if(counter>M) counter=0;
+
         }
 
     }
