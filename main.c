@@ -76,7 +76,7 @@ void main(void)
             ADC_In = ((ADC14->MEM[0]) >> ADCSCALE);
 
             // Reset sum
-            sum_f = 0;
+            sum_f = 256;
 
             // Record current x_in to a temp
             memcpy(x_in_temp, x_in, sizeof(x_in_temp));
@@ -100,7 +100,7 @@ void main(void)
             } // End for
 
             // If sum is over max of PWM, round to PWM max (2^9-1 I believe)
-            sum = sum_f + 256;
+            sum = sum_f;
 
             // Now put sum in PWM
             TIMER_A2->CCR[0] = 0;               //disable timer
