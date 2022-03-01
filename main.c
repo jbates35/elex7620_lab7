@@ -14,6 +14,7 @@
 #define SR_12kHz    4096
 #define FSAMP       SR_12kHz //sampling frequency
 
+#define J (N-1)/2 // Shortcut that comes up often - this is the index of the middle value in h[n] and x[n]
 
 void main(void)
 {
@@ -61,52 +62,39 @@ void main(void)
     __enable_interrupts();
 
     // Make x[N] of array length size(h_lpf) = {0}
-    int x_in[N] = {};
-    int x_in_temp[N] = {};
+    int x_in[N*2] = {};
 
     // Variable that gets assigned sum which will get assigned to y[n]
-    float sum_f;
-    int sum=0;
+    float sum=256;
     int i;
+    int counter = 0;
 
     while (1)  {
 
         if ((ADC14->IFGR0 & ADC14_IFGR0_IFG0) != 0)  {
+
             P6->OUT = BIT1; //Turn high when starting to process
 
             ADC_In = ((ADC14->MEM[0]) >> ADCSCALE);
+            x_in[counter] = x_in[counter+N] = ADC_In-256; //Store value into x_in
 
-            // Reset sum
-            sum_f = 256;
+            //Increment and rotate counter if need be
+            counter += 1;
+            if(counter>=N) counter = 0;
 
-            // Record current x_in to a temp
-            memcpy(x_in_temp, x_in, sizeof(x_in_temp));
-
-            //Iterate through loop to shift elements up one
-            for (i = (N-1)/2; i>=0; i--) {
-
-                // If = N-1, Store ADC value in x[i]
-                if(i == 0) {
-                    x_in[i] = ADC_In - 256;
-                    x_in[N-1-i] = x_in_temp[N-2-i];
-                }
-                else {
-                    x_in[i] = x_in_temp[i-1];
-                    x_in[N-1-i] = x_in_temp[N-2-i];
-                }
-
-                // sum += h[n] * x[n]
-                if (i==(N-1)/2) sum_f = sum_f + h[i] * x_in[i];
-                else sum_f = sum_f + h[i] * (x_in[i] + x_in[N-1-i]);
-            } // End for
-
-            // If sum is over max of PWM, round to PWM max (2^9-1 I believe)
-            sum = sum_f;
+            // Convolve all values except for the very middle value that gets calc'd last
+            for (i=0; i<J; i++) {
+                sum += h[i] * (x_in[i+counter] + x_in[N-1-i+counter]);
+            }
+            // Convolve middle values
+            sum += h[J] * x_in[J + counter];
 
             // Now put sum in PWM
             TIMER_A2->CCR[0] = 0;               //disable timer
-            TIMER_A2->CCR[1] = sum;             //load new duty cycle value
+            TIMER_A2->CCR[1] = (int) sum;    //load new duty cycle value
             TIMER_A2->CCR[0] = PWM_PERIOD-1;    //enable timer
+
+            sum = 256; // Reset sum
 
             P6->OUT = 0; // Turn low when done processing
 
@@ -116,12 +104,9 @@ void main(void)
 
 }
 
-
 void TA0_0_IRQHandler(void)  {
     TIMER_A0->CCTL[0] &= ~TIMER_A_CCTLN_CCIFG;
     TIMER_A0->CCR[0] += FSAMP;
-    P6->OUT = 0x01;
+    P6->OUT |= 0x01;
     ADC14->CTL0 |= ADC14_CTL0_ENC | ADC14_CTL0_SC;
 }
-
-
